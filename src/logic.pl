@@ -17,8 +17,11 @@ movement(l, diagonal).
 movement(r, orthogonal).
 movement(e, both).
 
-valid_move(piece(Animal,Player), FromX, ToX, FromY, ToY,GameState,CurrentPlayer):-                         
-        Player = CurrentPlayer,        
+valid_move(piece(Animal,Player), FromX, ToX, FromY, ToY,GameState,CurrentPlayer,Moves):-                         
+        Player = CurrentPlayer,
+        OutputX is ToX + 1,
+        OutputY is ToY + 1,
+        member([OutputX,OutputY],Moves),   
         movement(Animal, Direction),
         (element_at_position(GameState, ToX, ToY, o) ; element_at_position(GameState, ToX, ToY, water(w,(_,0)))), %check if the player is moving to an empty square
         ((Direction = orthogonal, (FromX = ToX, FromY \= ToY) ; (FromX \= ToX, FromY = ToY)) ;
@@ -29,8 +32,11 @@ valid_move(piece(Animal,Player), FromX, ToX, FromY, ToY,GameState,CurrentPlayer)
         write('not afraid'),
         (FromX \= ToX; FromY \= ToY). % cant stay in place
 
-valid_move(water(w,piece(Animal,Player)), FromX, ToX, FromY, ToY,GameState,CurrentPlayer):-                         
-        Player = CurrentPlayer,        
+valid_move(water(w,piece(Animal,Player)), FromX, ToX, FromY, ToY,GameState,CurrentPlayer,Moves):-                         
+        Player = CurrentPlayer,
+        OutputX is ToX + 1,
+        OutputY is ToY + 1,
+        member([OutputX,OutputY],Moves),
         movement(Animal, Direction),
         (element_at_position(GameState, ToX, ToY, o) ; element_at_position(GameState, ToX, ToY, water(w,(_,0)))), %check if the player is moving to an empty square
         ((Direction = orthogonal, (FromX = ToX, FromY \= ToY) ; (FromX \= ToX, FromY = ToY)) ;
@@ -45,24 +51,35 @@ adjacent_afraid(Animal, X, Y, GameState,Player):-
         scared_of(Animal,Scared),
         NextPlayer is (Player mod  2) + 1,
         (X1 is X+1, element_at_position(GameState,X1,Y,piece(Scared,NextPlayer));
+         X1 is X+1, element_at_position(GameState,X1,Y,water(w,piece(Scared,NextPlayer)));
          X1 is X-1, element_at_position(GameState,X1,Y,piece(Scared,NextPlayer));
+         X1 is X-1, element_at_position(GameState,X1,Y,water(w,piece(Scared,NextPlayer)));
          Y1 is Y+1, element_at_position(GameState,X,Y1,piece(Scared,NextPlayer));
+         Y1 is Y+1, element_at_position(GameState,X,Y1,water(w,piece(Scared,NextPlayer)));
          Y1 is Y-1, element_at_position(GameState,X,Y1,piece(Scared,NextPlayer));
+         Y1 is Y-1, element_at_position(GameState,X,Y1,water(w,piece(Scared,NextPlayer)));
          X1 is X+1, Y1 is Y+1, element_at_position(GameState,X1,Y1,piece(Scared,NextPlayer));
+         X1 is X+1, Y1 is Y+1, element_at_position(GameState,X1,Y1,water(w,piece(Scared,NextPlayer)));
          X1 is X-1, Y1 is Y+1, element_at_position(GameState,X1,Y1,piece(Scared,NextPlayer));
+         X1 is X-1, Y1 is Y+1, element_at_position(GameState,X1,Y1,water(w,piece(Scared,NextPlayer)));
          X1 is X-1, Y1 is Y-1, element_at_position(GameState,X1,Y1,piece(Scared,NextPlayer));
-         X1 is X+1, Y1 is Y-1, element_at_position(GameState,X1,Y1,piece(Scared,NextPlayer))).
+         X1 is X-1, Y1 is Y-1, element_at_position(GameState,X1,Y1,water(w,piece(Scared,NextPlayer)));
+         X1 is X+1, Y1 is Y-1, element_at_position(GameState,X1,Y1,piece(Scared,NextPlayer));
+         X1 is X+1, Y1 is Y-1, element_at_position(GameState,X1,Y1,water(w,piece(Scared,NextPlayer)))).
          
-read_move(Row, Col, ToRow, ToCol, [Size,Board],Player) :-
+process_move(Row, Col, ToRow, ToCol, [Size,Board],Player,Moves) :-
+        (forced_move(Player,[Size,Board],Row,Col) -> write('You need to move the piece in position '),
+        OutputRow is Row +1, OutputCol is Col+1,
+        write(OutputRow), write('-'), write(OutputCol), write(' Because it is afraid of a nearby animal'),nl ;        
         write('Please write your movement in the format:  '), nl,
         write('Row-Col'), nl,         
         read(Input),
         Row1-Col1 = Input,
         Row is Row1-1,
-        Col is Col1-1,
-        element_at_position([Size,Board], Row, Col, piece(Animal,OwnPlayer)),
-        OwnPlayer = Player,
-        possible_moves([Size,Board], Row, Col, Moves, piece(Animal,OwnPlayer)),
+        Col is Col1-1
+        ),
+        element_at_position([Size,Board], Row, Col, Piece),
+        possible_moves([Size,Board], Row, Col, Moves, Piece, Player),
         write('The list of possible moves for this piece is: '), nl,
         write(Moves), nl,
         
@@ -74,13 +91,18 @@ read_move(Row, Col, ToRow, ToCol, [Size,Board],Player) :-
         ToCol is ToCol1-1,
         number(Row), number(Col), number(ToRow), number(ToCol).
 
+forced_move(Player,[Size,Board],Row,Col):-
+        nth0(Row, Board, RowElements),
+        (nth0(Col, RowElements, piece(Animal,Player)); nth0(Col, RowElements, water(w,piece(Animal,Player)))),
+        adjacent_afraid(Animal,Row,Col,[Size,Board],Player),!.
+
 turn(Player, [Size,Board], UpdatedBoard):-
         write('Player:  '), write(Player), nl,
-        read_move(FromX, FromY, ToX, ToY,[Size,Board],Player),
+        process_move(FromX, FromY, ToX, ToY,[Size,Board],Player,Moves),
         write('valid read'),nl,
         element_at_position([Size,Board], FromX, FromY, Piece), %get Piece
         write('valid element at position'), nl,
-        (\+valid_move(Piece, FromX, ToX, FromY, ToY, [Size,Board],Player) -> write('Invalid Move!, try again'), nl, turn(Player, [Size,Board],UpdatedBoard);
+        (\+valid_move(Piece, FromX, ToX, FromY, ToY, [Size,Board],Player,Moves) -> write('Invalid Move!, try again'), nl, turn(Player, [Size,Board],UpdatedBoard);
          write('valid move'),nl,
          write(Piece),nl,
         (Piece = water(w, _) -> replace_in_board(Board,FromX, FromY, Piece, water(w,(o,0)), NewBoard);
@@ -95,8 +117,8 @@ turn(Player, [Size,Board], UpdatedBoard):-
 game_loop(Player,[Size,Board]) :-
         turn(Player,[Size,Board],NewBoard),
         NextPlayer is (Player mod  2) + 1,
-        %(game_over(GameState,Winner) -> break; true),
         displayBoard(NewBoard),
+        (game_over([Size,NewBoard],Winner) -> break; true),    
         game_loop(NextPlayer,[Size,NewBoard]).
         
 
@@ -113,7 +135,20 @@ game_over([_,Board], Winner) :-
          (Count2 >= 3 -> Winner = 2;
           fail)).
 
-possible_moves(GameState,Row,Col,Moves,piece(Animal,Player)):-
+possible_moves(GameState,Row,Col,Moves,water(w,piece(Animal,Player)), ActualPlayer):-
+        ActualPlayer = Player,
+        movement(Animal, Direction),
+        ((Direction = orthogonal, possible_moves_orthogonally(GameState,Row,Col,Moves,piece(Animal,Player))) ;
+        (Direction = diagonal, possible_moves_diagonally(GameState,Row,Col,Moves,piece(Animal,Player)));
+        (Direction = both,
+         possible_moves_orthogonally(GameState,Row,Col,MovesOrt,piece(Animal,Player)),
+         possible_moves_diagonally(GameState,Row,Col,MovesDiag,piece(Animal,Player)),
+         append([], MovesOrt, Moves1),
+         append(Moves1, MovesDiag, Moves))
+        ).
+              
+possible_moves(GameState,Row,Col,Moves,piece(Animal,Player),ActualPlayer):-
+        ActualPlayer = Player,
         movement(Animal, Direction),
         ((Direction = orthogonal, possible_moves_orthogonally(GameState,Row,Col,Moves,piece(Animal,Player))) ;
         (Direction = diagonal, possible_moves_diagonally(GameState,Row,Col,Moves,piece(Animal,Player)));
@@ -262,15 +297,9 @@ possible_moves_right(GameState,Row,Col,Moves,Animal,Player):-
         ).
 
 count_occurrences(Array, Player, Count) :-
-        findall(X, (member(Row, Array), member(X, Row), X = water(w,_,Player)), Occurrences),
+        findall(X, (member(Row, Array), member(X, Row), X = water(w,piece(_,Player))), Occurrences),
+        write('Player '), write(Player), write(' Has '), write(Occurrences),nl,
         length(Occurrences, Count).
- 
-display_adjacency_error(X,Y,Animal):-
-        OutputX is X + 1,
-        OutputY is Y + 1,
-        animal(Animal),
-        write('Not a valid move! The animal you tryied to move is afraid of the '), write(Animal), write(' in position '), write(OutputX), write(','), write(OutputY),!.
-
                 
         
         
