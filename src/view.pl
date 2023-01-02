@@ -52,3 +52,8 @@ set_size(Size) :-
     % Set the size of the game
     number(Size).
 
+winner(Winner) :-
+
+    nl, write('Game is over! Player '), write(Winner), write(' Wins!'), nl,
+    nl,
+    write('Thanks for playing! hope you enjoyed!').
