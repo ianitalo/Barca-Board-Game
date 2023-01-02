@@ -20,7 +20,7 @@ initial_state(Size, [1,InitialBoard]):-
     insert_Lions(BoardWithElephants, BoardWithLions, Size),
     insert_Rats(BoardWithLions, BoardWithRats, Size),
     insert_Gates(BoardWithRats, InitialBoard, Size),
-    displayBoard(InitialBoard).
+    displayBoard(InitialBoard), !.
 
 create_rows(_,1,0,CurrentRow,CurrentBoard,Result):-   
     append([CurrentRow],CurrentBoard,Result).
