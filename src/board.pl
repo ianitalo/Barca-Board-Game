@@ -2,16 +2,11 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    Creates & Initializes a board   &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
-% creates and returns the initial gameboard with a given <Size>
+% creates and returns the initial gameboard with a given <Size>, also provide functions to change the board and display it
 
-%initial_state(+Size, -GameState):-
 :- use_module(library(lists)).
 
-piece(Animal,Player):-
-    animal(Animal),
-    (Player = 1; Player = 2).
-
-% creates and returns the empty side of the board[
+% creates and returns the initial board with the given Size
 initial_state(Size, [1,InitialBoard]):-
     Row is Size,
     Column is Size,
@@ -21,6 +16,27 @@ initial_state(Size, [1,InitialBoard]):-
     insert_Rats(BoardWithLions, BoardWithRats, Size),
     insert_Gates(BoardWithRats, InitialBoard, Size),
     displayBoard(InitialBoard), !.
+
+%get the element at position row,col
+element_at_position([Size,Board], Row, Col, Element) :-
+    within_Board(Row,Col,Size),
+    nth0(Row, Board, SelectedRow),
+    nth0(Col, SelectedRow, Element).
+
+% Check if a position is within the board
+within_Board(X, Y, Size) :-
+    X >= 0, X < Size,
+    Y >= 0, Y < Size.
+
+%Replace the element in row, col with NewElem and returns the new board
+replace_in_board(Board, Row, Col,_, NewElem, NewBoard) :-
+   % predicate works forward: Index,List -> OldElem, Transfer
+   nth0(Row,Board,EspecificRow),
+   nth0(Col,EspecificRow,_,Transfer),
+   % predicate works backwards: Index,NewElem,Transfer -> NewList
+   nth0(Col,NewRow,NewElem,Transfer),
+   nth0(Row,Board,EspecificRow,BoardRest),
+   nth0(Row,NewBoard,NewRow,BoardRest).
 
 create_rows(_,1,0,CurrentRow,CurrentBoard,Result):-   
     append([CurrentRow],CurrentBoard,Result).
@@ -179,25 +195,4 @@ insert_Gates(Board, BoardWithGates, Size):-
     replace_in_board(BoardWith1Gate,3,SecondGateColumn,o,water(w,(o,0)),BoardWith2Gate),
     replace_in_board(BoardWith2Gate,LastGateRole,FirstGateColumn,o,water(w,(o,0)),BoardWith3Gate),
     replace_in_board(BoardWith3Gate,LastGateRole,SecondGateColumn,o,water(w,(o,0)),BoardWithGates).
-
-element_at_position([Size,Board], Row, Col, Element) :-
-    within_Board(Row,Col,Size),
-    nth0(Row, Board, SelectedRow),
-    nth0(Col, SelectedRow, Element).
-
-% Check if a position is within the board
-within_Board(X, Y, Size) :-
-    X >= 0, X < Size,
-    Y >= 0, Y < Size.
-
-%nth0(?Index, ?List, ?Elem)
-%nth0(?N, ?List, ?Elem, ?Rest)
-replace_in_board(Board, Row, Col,OldElem, NewElem, NewBoard) :-
-   % predicate works forward: Index,List -> OldElem, Transfer
-   nth0(Row,Board,EspecificRow),
-   nth0(Col,EspecificRow,_,Transfer),
-   % predicate works backwards: Index,NewElem,Transfer -> NewList
-   nth0(Col,NewRow,NewElem,Transfer),
-   nth0(Row,Board,EspecificRow,BoardRest),
-   nth0(Row,NewBoard,NewRow,BoardRest).
    

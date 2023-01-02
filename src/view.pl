@@ -14,6 +14,7 @@ menu(Size,P1,P2) :-
         Choice = 4 -> true % Exit the program
     ).
 
+% Display the game rules
 game_rules :-
     write('Each player controls 6 animals of 3 different types'), nl, 
     write('The Mouse can move orthogonally (horizontal or vertical)'), nl, 
@@ -27,7 +28,7 @@ game_rules :-
     write('scared of it MUST move on your next turn. You cannot move a piece next to a piece (orthogonal AND diagonal) that it is scared of.').
 
 
-% Define the play menu
+% Define the play menu, default value is 10 for the size
 play_menu(Size,P1,P2) :-
     % Check if Value has a value
         ( var(Size) -> Size = 10; true ),
@@ -36,7 +37,7 @@ play_menu(Size,P1,P2) :-
     write('3. Player vs Hard Robot'), nl,
     write('4. Hard Robot vs Hard Robot'), nl,
     % Read the user's choice
-    read(Choice),
+    read(Choice),nl,
     % Process the choice
     (
         Choice = 1 -> write('Starting Player vs Player game'), P1 = 1, P2 = 2, nl; % Start a Player vs Player game
@@ -52,8 +53,8 @@ set_size(Size) :-
     % Set the size of the game
     number(Size).
 
+% Display the Winner of the game
 winner(Winner) :-
-
     nl, write('Game is over! Player '), write(Winner), write(' Wins!'), nl,
     nl,
     write('Thanks for playing! hope you enjoyed!').

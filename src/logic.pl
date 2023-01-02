@@ -2,23 +2,54 @@
 :- use_module(library(random)).
 :-ensure_loaded('board.pl').
 :-ensure_loaded('view.pl').
+:-ensure_loaded('definitions.pl').
+:-ensure_loaded('bot.pl').
 
-animal(l).
-animal(e).
-animal(r).
 
-water(w, (Animal, Player)):-
-        (animal(Animal) ; Animal = o),
-        (Player = 0; Player = 1; Player = 2).
+%Initial function that calls the menu and initiate the game with player 1 and initial_state of the board      
+play :-
+        menu(Size,P1,P2),
+        Player is 1,
+        initial_state(Size,[Player,Board]), !,
+        game_loop(Player, [Size,Board],P1,P2).
 
-scared_of(l,e).
-scared_of(e,r).
-scared_of(r,l).
+%The game loop calls the turn of the player or bot and changes the player for the next loop
+%also displays the game and checks if the game is over
+game_loop(Player,[Size,Board],P1,P2) :-      
+        ((Player = P1 ; Player = P2) ->turn(Player,[Size,Board],NewBoard) ; true),
+        ((Player = 2, P2 = 'e') -> easybot(Player,[Size,Board],NewBoard) ; true),       
+        (((Player = 1, P1 = 'h') ; (Player = 2, P2 = 'h')) -> hardbot(Player,[Size,Board],NewBoard) ; true),
+        NextPlayer is (Player mod  2) + 1,
+        displayBoard(NewBoard),
+        (game_over([Size,NewBoard],Winner) -> winner(Winner), true;    
+        game_loop(NextPlayer,[Size,NewBoard],P1,P2)).
 
-movement(l, diagonal).
-movement(r, orthogonal).
-movement(e, both).
+%Check if the game is over
+game_over([_,Board], Winner) :- 
+        count_occurrences(Board, 1, Count1),
+        count_occurrences(Board, 2, Count2),
+        (Count1 >= 3 -> Winner = 1;
+         (Count2 >= 3 -> Winner = 2;
+          fail)).
 
+%A player turn, process the move and updates the board
+turn(Player, [Size,Board], UpdatedBoard):-
+        write('Player:  '), write(Player), nl,
+        process_move(FromX, FromY, ToX, ToY,[Size,Board],Player,Moves),
+        element_at_position([Size,Board], FromX, FromY, Piece), %get Piece
+        (\+valid_move(Piece, FromX, ToX, FromY, ToY, [Size,Board],Player,Moves) -> write('Invalid Move!, try again'), nl, turn(Player, [Size,Board],UpdatedBoard);
+
+        (Piece = water(w, _) -> replace_in_board(Board,FromX, FromY, Piece, water(w,(o,0)), NewBoard);
+                        replace_in_board(Board,FromX, FromY, Piece, o, NewBoard)),
+        element_at_position([Size,Board], ToX, ToY, Destination),
+        (Destination = water(w, _) -> replace_in_board(NewBoard,ToX, ToY, Piece, water(w,Piece),UpdatedBoard);
+                (Piece = water(w, piece(AnimalInWater,PlayerInWater)) -> replace_in_board(NewBoard,ToX, ToY, o, piece(AnimalInWater,PlayerInWater), UpdatedBoard);
+                        replace_in_board(NewBoard,ToX, ToY, o, Piece, UpdatedBoard)))).
+
+%Checks if the move is valid, by checking if the piece choosen is from the current player,
+%Then checks if the move is part of the possible movements,
+%After double checks if the movement makes sense with the Animal direction,
+%Last checks if the animal is not moving to a field adjacent to a animal it is afraid of
 valid_move(piece(Animal,Player), FromX, ToX, FromY, ToY,GameState,CurrentPlayer,Moves):-                         
         Player = CurrentPlayer,
         OutputX is ToX + 1,
@@ -31,7 +62,6 @@ valid_move(piece(Animal,Player), FromX, ToX, FromY, ToY,GameState,CurrentPlayer,
         (Direction = both, (FromX = ToX, FromY \= ToY) ; (FromX \= ToX, FromY = ToY) ; (abs(FromX - ToX) =:= abs(FromY - ToY)))), !,
         \+ adjacent_afraid(Animal, ToX, ToY, GameState, Player),
         (FromX \= ToX; FromY \= ToY). % cant stay in place
-
 valid_move(water(w,piece(Animal,Player)), FromX, ToX, FromY, ToY,GameState,CurrentPlayer,Moves):-                         
         Player = CurrentPlayer,
         OutputX is ToX + 1,
@@ -46,6 +76,7 @@ valid_move(water(w,piece(Animal,Player)), FromX, ToX, FromY, ToY,GameState,Curre
         \+ adjacent_afraid(Animal, ToX, ToY, GameState, Player),
         (FromX \= ToX; FromY \= ToY). % cant stay in place
 
+%Checks if tha Animal at position X,Y is scared of a piece adjacent of from the other player
 adjacent_afraid(Animal, X, Y, GameState,Player):-
         scared_of(Animal,Scared),
         NextPlayer is (Player mod  2) + 1,
@@ -65,7 +96,8 @@ adjacent_afraid(Animal, X, Y, GameState,Player):-
          X1 is X-1, Y1 is Y-1, element_at_position(GameState,X1,Y1,water(w,piece(Scared,NextPlayer)));
          X1 is X+1, Y1 is Y-1, element_at_position(GameState,X1,Y1,piece(Scared,NextPlayer));
          X1 is X+1, Y1 is Y-1, element_at_position(GameState,X1,Y1,water(w,piece(Scared,NextPlayer)))).
-         
+   
+%Get the movement from the player and output the possible moves to make      
 process_move(Row, Col, ToRow, ToCol, [Size,Board],Player,Moves) :-
         (forced_move(Player,[Size,Board],Row,Col) -> write('You need to move the piece in position '),
         OutputRow is Row +1, OutputCol is Col+1,
@@ -90,106 +122,13 @@ process_move(Row, Col, ToRow, ToCol, [Size,Board],Player,Moves) :-
         ToCol is ToCol1-1,
         number(Row), number(Col), number(ToRow), number(ToCol).
 
+%Checks if a forced move needs to be made, and in that case, returns the row and col of the piece that needs to move
 forced_move(Player,[Size,Board],Row,Col):-
         nth0(Row, Board, RowElements),
         (nth0(Col, RowElements, piece(Animal,Player)); nth0(Col, RowElements, water(w,piece(Animal,Player)))),
         adjacent_afraid(Animal,Row,Col,[Size,Board],Player),!.
 
-turn(Player, [Size,Board], UpdatedBoard):-
-        write('Player:  '), write(Player), nl,
-        process_move(FromX, FromY, ToX, ToY,[Size,Board],Player,Moves),
-        element_at_position([Size,Board], FromX, FromY, Piece), %get Piece
-        (\+valid_move(Piece, FromX, ToX, FromY, ToY, [Size,Board],Player,Moves) -> write('Invalid Move!, try again'), nl, turn(Player, [Size,Board],UpdatedBoard);
-         write('valid move'),nl,
-        (Piece = water(w, _) -> replace_in_board(Board,FromX, FromY, Piece, water(w,(o,0)), NewBoard);
-                        replace_in_board(Board,FromX, FromY, Piece, o, NewBoard)),
-        element_at_position([Size,Board], ToX, ToY, Destination),
-        (Destination = water(w, _) -> replace_in_board(NewBoard,ToX, ToY, Piece, water(w,Piece),UpdatedBoard);
-                (Piece = water(w, piece(AnimalInWater,PlayerInWater)) -> replace_in_board(NewBoard,ToX, ToY, o, piece(AnimalInWater,PlayerInWater), UpdatedBoard);
-                        replace_in_board(NewBoard,ToX, ToY, o, Piece, UpdatedBoard)))).
-
-easybot(Player,[Size,Board], UpdatedBoard) :-
-        (forced_move(Player,[Size,Board],Row,Col) ->
-         findall((Row, Col, Piece), (nth0(Row, Board, RowList), nth0(Col, RowList, Piece), (Piece = piece(_, Player) ; Piece = water(w,piece(_,Player)))), Pieces),
-         write('Forced!'), nl
-         ;
-        findall((R, C, Piece), (nth0(R, Board, RowList), nth0(C, RowList, Piece), (Piece = piece(_, Player) ; Piece = water(w,piece(_,Player)))), Pieces)
-        ),
-        length(Pieces, Choices),
-        random(0, Choices, Choice),
-        nth0(Choice, Pieces, (Row,Col,Element)),
-    
-        % If the element is a piece, get all the possible moves for that piece
-        possible_moves([Size,Board], Row, Col, PossibleMoves, Element,Player), !,
-        % Choose a random move from the list of possible moves
-        length(PossibleMoves, NumMoves),
-        random(0, NumMoves, MoveIndex),
-        nth0(MoveIndex, PossibleMoves, [X1,Y1]),
-        OutputRow is Row +1, OutputCol is Col+1,
-        write('Bot is going to move piece from '),write('['),write(OutputRow),write('-'), write(OutputCol),write(']'), nl,
-        write('To '),write('['),write(X1),write('-'), write(Y1),write(']'), nl,
-        X is X1 - 1,
-        Y is Y1 - 1,
-        % Update the board with the chosen move
-        (Element = water(w, _) -> replace_in_board(Board,Row, Col, Element, water(w,(o,0)), NewBoard);
-                        replace_in_board(Board,Row, Col, Element, o, NewBoard)),
-        element_at_position([Size,Board], X, Y, Destination),
-        (Destination = water(w, _) -> replace_in_board(NewBoard,X, Y, Element, water(w,Element),UpdatedBoard);
-                (Element = water(w, piece(AnimalInWater,PlayerInWater)) -> replace_in_board(NewBoard,X, Y, o, piece(AnimalInWater,PlayerInWater), UpdatedBoard);
-                        replace_in_board(NewBoard,X, Y, o, Element, UpdatedBoard))).
-
-
-hardbot(Player,[Size,Board], UpdatedBoard) :-
-        forced_move(Player,[Size,Board],Row,Col),
-        write('Forced!'), nl,
-        OutputRow is Row +1, OutputCol is Col+1,
-        hardbot_move([Size,Board], Player, Row,Col,Element, [R,C]),
-        write('Bot is going to move piece from '),write('['),write(OutputRow),write('-'), write(OutputCol),write(']'), nl,
-        write('To '),write('['),write(R),write('-'), write(C),write(']'), nl,
-        (Element = water(w, _) -> replace_in_board(Board,Row, Col, Element, water(w,(o,0)), NewBoard);
-                        replace_in_board(Board,Row, Col, Element, o, NewBoard)),
-        element_at_position([Size,Board], R, C, Destination),
-        (Destination = water(w, _) -> replace_in_board(NewBoard,R, C, Element, water(w,Element),UpdatedBoard);
-                (Element = water(w, piece(AnimalInWater,PlayerInWater)) -> replace_in_board(NewBoard,R, C, o, piece(AnimalInWater,PlayerInWater), UpdatedBoard);
-                        replace_in_board(NewBoard,R, C, o, Element, UpdatedBoard))).
-
-hardbot(Player,[Size,Board], UpdatedBoard) :-
-        
-        hardbot_move([Size,Board], Player, (Row,Col,Element), [R,C]),
-        OutputRow is Row +1, OutputCol is Col+1,
-        write('Bot is going to move piece from '),write('['),write(OutputRow),write('-'), write(OutputCol),write(']'), nl,
-        write('To '),write('['),write(R),write('-'), write(C),write(']'), nl,
-        
-        (Element = water(w, _) -> replace_in_board(Board,Row, Col, Element, water(w,(o,0)), NewBoard);
-                        replace_in_board(Board,Row, Col, Element, o, NewBoard)),
-        
-        element_at_position([Size,Board], R, C, Destination),
-        (Destination = water(w, _) -> replace_in_board(NewBoard,R, C, Element, water(w,Element),UpdatedBoard);
-                (Element = water(w, piece(AnimalInWater,PlayerInWater)) -> replace_in_board(NewBoard,R, C, o, piece(AnimalInWater,PlayerInWater), UpdatedBoard);
-                        replace_in_board(NewBoard,R, C, o, Element, UpdatedBoard))).
-
-game_loop(Player,[Size,Board],P1,P2) :-      
-        ((Player = P1 ; Player = P2) ->turn(Player,[Size,Board],NewBoard) ; true),
-        ((Player = 2, P2 = 'e') -> easybot(Player,[Size,Board],NewBoard) ; true),       
-        (((Player = 1, P1 = 'h') ; (Player = 2, P2 = 'h')) -> hardbot(Player,[Size,Board],NewBoard) ; true),
-        NextPlayer is (Player mod  2) + 1,
-        displayBoard(NewBoard),
-        (game_over([Size,NewBoard],Winner) -> winner(Winner), true;    
-        game_loop(NextPlayer,[Size,NewBoard],P1,P2)).
-        
-play :-
-        menu(Size,P1,P2),
-        Player is 1,
-        initial_state(Size,[Player,Board]), !,
-        game_loop(Player, [Size,Board],P1,P2).
-
-game_over([_,Board], Winner) :- 
-        count_occurrences(Board, 1, Count1),
-        count_occurrences(Board, 2, Count2),
-        (Count1 >= 3 -> Winner = 1;
-         (Count2 >= 3 -> Winner = 2;
-          fail)).
-
+%Gets all possible moves for a piece and returns it in Moves
 possible_moves(GameState,Row,Col,Moves,water(w,piece(Animal,Player)), ActualPlayer):-
         ActualPlayer = Player,
         movement(Animal, Direction),
@@ -200,8 +139,7 @@ possible_moves(GameState,Row,Col,Moves,water(w,piece(Animal,Player)), ActualPlay
          possible_moves_diagonally(GameState,Row,Col,MovesDiag,piece(Animal,Player)),
          append([], MovesOrt, Moves1),
          append(Moves1, MovesDiag, Moves))
-        ).
-              
+        ).              
 possible_moves(GameState,Row,Col,Moves,piece(Animal,Player),ActualPlayer):-
         ActualPlayer = Player,
         movement(Animal, Direction),
@@ -213,7 +151,14 @@ possible_moves(GameState,Row,Col,Moves,piece(Animal,Player),ActualPlayer):-
          append([], MovesOrt, Moves1),
          append(Moves1, MovesDiag, Moves))
         ).
-        
+
+%Count the occurences of animals in water for the given player (to check if the game ended)      
+count_occurrences(Array, Player, Count) :-
+        findall(X, (member(Row, Array), member(X, Row), X = water(w,piece(_,Player))), Occurrences),       
+        length(Occurrences, Count).
+                
+
+%%%%% Possible moves in its respective direction %%%%%
 possible_moves_diagonally(GameState,Row,Col,Moves,piece(Animal,Player)):-
         possible_moves_upright(GameState,Row,Col,MovesUpRight,Animal,Player),
         possible_moves_upleft(GameState,Row,Col,MovesUpLeft,Animal,Player),
@@ -223,7 +168,6 @@ possible_moves_diagonally(GameState,Row,Col,Moves,piece(Animal,Player)):-
         append(Moves1, MovesUpLeft, Moves2),
         append(Moves2, MovesDownRight, Moves3),
         append(Moves3, MovesDownLeft, Moves).
-
 possible_moves_upright(GameState,Row,Col,Moves,Animal,Player):-
         NewRow is Row +1,
         NewCol is Col +1,
@@ -238,7 +182,6 @@ possible_moves_upright(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_upleft(GameState,Row,Col,Moves,Animal,Player):-
         NewRow is Row +1,
         NewCol is Col -1,
@@ -254,7 +197,6 @@ possible_moves_upleft(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_downright(GameState,Row,Col,Moves,Animal,Player):-
         NewRow is Row -1,
         NewCol is Col +1,
@@ -269,7 +211,6 @@ possible_moves_downright(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_downleft(GameState,Row,Col,Moves,Animal,Player):-
         NewRow is Row -1,
         NewCol is Col -1,
@@ -284,7 +225,6 @@ possible_moves_downleft(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_orthogonally(GameState,Row,Col,Moves,piece(Animal,Player)):-
         possible_moves_up(GameState,Row,Col,MovesUp,Animal,Player),
         possible_moves_down(GameState,Row,Col,MovesDown,Animal,Player),
@@ -294,7 +234,6 @@ possible_moves_orthogonally(GameState,Row,Col,Moves,piece(Animal,Player)):-
         append(Moves1, MovesDown, Moves2),
         append(Moves2, MovesLeft, Moves3),
         append(Moves3, MovesRight, Moves).
-
 possible_moves_up(GameState,Row,Col,Moves,Animal,Player):-
         NewRow is Row +1,
         (element_at_position(GameState,NewRow,Col,Element),
@@ -308,7 +247,6 @@ possible_moves_up(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_down(GameState,Row,Col,Moves,Animal,Player):-
         NewRow is Row -1,
         (element_at_position(GameState,NewRow,Col,Element),
@@ -322,7 +260,6 @@ possible_moves_down(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_left(GameState,Row,Col,Moves,Animal,Player):-
         NewCol is Col -1,
         (element_at_position(GameState,Row,NewCol,Element),
@@ -336,7 +273,6 @@ possible_moves_left(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
 possible_moves_right(GameState,Row,Col,Moves,Animal,Player):-
         NewCol is Col +1,
         (element_at_position(GameState,Row,NewCol,Element),
@@ -350,50 +286,5 @@ possible_moves_right(GameState,Row,Col,Moves,Animal,Player):-
         ;
          Moves = []
         ).
-
-count_occurrences(Array, Player, Count) :-
-        findall(X, (member(Row, Array), member(X, Row), X = water(w,piece(_,Player))), Occurrences),       
-        length(Occurrences, Count).
-                
-
-hardbot_move([Size,Board], Player, Row, Col,Element, BestMove) :-
-    % Get all the pieces of the given player
-    element_at_position([Size,Board], Row, Col, PII),  
-    findall((D, ROOO, COOO), (possible_moves([Size,Board], Row, Col, Moves, PII, Player),
-                                member([ROOO,COOO],Moves),distance_forced(ROOO,COOO,PII,Di,Board,Player), min_member(D, Di) ),Choice),
-
-    min_member((_-Piec,ToRowOutput,ToColOutput),Choice),
-    Element = Piec,
-    BestRow is ToRowOutput -1,
-    BestCol is ToColOutput -1,
-    BestMove = [BestRow,BestCol].     
-
-hardbot_move([Size,Board], Player, ChoosenPiece, BestMove) :-
-    % Get all the pieces of the given player       
-    findall((R, C, P), (nth0(R, Board, RowList), nth0(C, RowList, P), (P = piece(_, Player) ; P = water(w,piece(_,Player)))), Pieces),
-    findall((D,ROO, COO, ROOO, COOO), (member((ROO,COO,PII), Pieces), PII \= water(w,_), possible_moves([Size,Board], ROO, COO, Moves, PII, Player),
-                                member([ROOO,COOO],Moves),distance(ROOO,COOO,ROO, COO,PII,Di,Board,Player), min_member(D, Di) ),Choice),
-    
-    min_member((_-Piec,FromRow,FromCol,ToRowOutput,ToColOutput),Choice),
-    ChoosenPiece = (FromRow,FromCol,Piec),
-    BestRow is ToRowOutput -1,
-    BestCol is ToColOutput -1,
-    BestMove = [BestRow,BestCol].
-
-    
-
-        
-distance(Ro,Co,OldRo, OldCo,PI,D,Board,Player):-
-        Ro1 is Ro -1,
-        Co1 is Co -1,
-        findall((Distance-PI), (nth0(R, Board, RowList), nth0(C, RowList, W), (W = water(w,_), (W \= water(w,(_,Player)))),
-                                Distance is (abs(Ro1 - R) + abs(Co1 - C)),
-                               Distance2 is (abs(OldRo - R) + abs(OldCo - C)),
-                               Distance < Distance2), D).
-
-distance_forced(Ro,Co,PI,D,Board,Player):-
-        Ro1 is Ro -1,
-        Co1 is Co -1,
-        findall((Distance-PI), (nth0(R, Board, RowList), nth0(C, RowList, W), (W = water(w,_), (W \= water(w,(_,Player)))),
-                                Distance is (abs(Ro1 - R) + abs(Co1 - C))), D).
+%%%%% Possible moves in its respective direction %%%%%
         
