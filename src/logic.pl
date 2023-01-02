@@ -1,5 +1,7 @@
 :- use_module(library(lists)).
+:- use_module(library(random)).
 :-ensure_loaded('board.pl').
+:-ensure_loaded('view.pl').
 
 animal(l).
 animal(e).
@@ -114,19 +116,47 @@ turn(Player, [Size,Board], UpdatedBoard):-
                         replace_in_board(NewBoard,ToX, ToY, o, Piece, UpdatedBoard))),
         write('valid New UpBoard'),nl).
 
-game_loop(Player,[Size,Board]) :-
-        turn(Player,[Size,Board],NewBoard),
+easybot(Player,[Size,Board], UpdatedBoard) :-
+
+        findall((R, C, Piece), (nth0(R, Board, RowList), nth0(C, RowList, Piece), (Piece = piece(_, Player) ; Piece = water(w,piece(_,Player)))), Pieces),
+        length(Pieces, Choices),
+        random(0, Choices, Choice),
+        nth0(Choice, Pieces, (Row,Col,Element)),
+    
+        % If the element is a piece, get all the possible moves for that piece
+        possible_moves([Size,Board], Row, Col, PossibleMoves, Element,Player), !,
+        % Choose a random move from the list of possible moves
+        length(PossibleMoves, NumMoves),
+        random(0, NumMoves, MoveIndex),
+        nth0(MoveIndex, PossibleMoves, [X1,Y1]),
+        X is X1 - 1,
+        Y is Y1 - 1,
+        % Update the board with the chosen move
+        (Element = water(w, _) -> replace_in_board(Board,Row, Col, Element, water(w,(o,0)), NewBoard);
+                        replace_in_board(Board,Row, Col, Element, o, NewBoard)),
+        write('valid New Board'),nl,
+        element_at_position([Size,Board], X, Y, Destination),
+        (Destination = water(w, _) -> replace_in_board(NewBoard,X, Y, Element, water(w,Piece),UpdatedBoard);
+                (Element = water(w, piece(AnimalInWater,PlayerInWater)) -> replace_in_board(NewBoard,X, Y, o, piece(AnimalInWater,PlayerInWater), UpdatedBoard);
+                        replace_in_board(NewBoard,X, Y, o, Element, UpdatedBoard))),
+        write('valid New UpBoard'),nl.
+
+
+game_loop(Player,[Size,Board],P1,P2) :-
+        ((Player = P1 ; Player = P2) ->turn(Player,[Size,Board],NewBoard) ; true),
+        ((Player = 2, P2 = 'e') -> easybot(Player,[Size,Board],NewBoard) ; true),
+        %((Player = 1, P1 = 'h') ; (Player = 2, P2 = 'h') -> hardbot(Player,[Size,Board],NewBoard)),
         NextPlayer is (Player mod  2) + 1,
         displayBoard(NewBoard),
         (game_over([Size,NewBoard],Winner) -> break; true),    
-        game_loop(NextPlayer,[Size,NewBoard]).
+        game_loop(NextPlayer,[Size,NewBoard],P1,P2).
         
 
 play :-
+        menu(Size,P1,P2),
         Player is 1,
-        Size is 10,
-        initial_state(Size,[Player,Board]),
-        game_loop(Player, [Size,Board]).
+        initial_state(Size,[Player,Board]), !,
+        game_loop(Player, [Size,Board],P1,P2).
 
 game_over([_,Board], Winner) :- 
         count_occurrences(Board, 1, Count1),
